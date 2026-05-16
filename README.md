@@ -11,10 +11,10 @@ The `.vscode` directory is intentionally tracked as a reference to configure hig
 | Skill | Description | Key Topics |
 |-------|-------------|------------|
 | [writing-tilelang-kernels](skills/tilelang/writing-tilelang-kernels/SKILL.md) | Write TileLang GPU kernels from scratch or by adapting patterns | Kernel anatomy, templates (GEMM, elementwise, reduction), memory scopes, T.copy/T.gemm, dynamic shapes |
-| [debugging-tilelang-programs](skills/tilelang/debugging-tilelang-programs/SKILL.md) | Diagnose and fix errors in TileLang programs | Failure taxonomy, T.print, AutoDD, CUDA inspection, error catalog, numerical drift |
-| [profiling-tilelang-programs](skills/tilelang/profiling-tilelang-programs/SKILL.md) | Benchmark and profile TileLang kernels | do_bench backends, TFLOPS/bandwidth calculation, ncu/nsys, roofline analysis |
-| [optimizing-tilelang-programs](skills/tilelang/optimizing-tilelang-programs/SKILL.md) | Optimize TileLang kernels for performance | Tile sizes, pipeline stages, threads, AutoTuner, epilogue fusion, swizzle |
-| [testing-fwd-bwd-kernels](skills/tilelang/testing-fwd-bwd-kernels/SKILL.md) | Test kernels with forward and backward passes | torch.autograd.Function, gradient comparison, atomicAdd, attention bwd patterns |
+| [debugging-tilelang-programs](skills/tilelang/debugging-tilelang-programs/SKILL.md) | Diagnose and fix errors in TileLang programs | Failure taxonomy, T.print, AutoDD, compute-sanitizer, numerical drift, race detection |
+| [profiling-tilelang-programs](skills/tilelang/profiling-tilelang-programs/SKILL.md) | Benchmark and profile TileLang kernels | do_bench backends, TFLOPS/bandwidth, ncu bottleneck diagnosis (pipe utilization, warp stalls), roofline |
+| [optimizing-tilelang-programs](skills/tilelang/optimizing-tilelang-programs/SKILL.md) | Optimize TileLang kernels for performance | Tile sizes, pipeline stages, threads, AutoTuner, epilogue fusion, swizzle, ncu-guided tuning |
+| [testing-fwd-bwd-kernels](skills/tilelang/testing-fwd-bwd-kernels/SKILL.md) | Test kernels with forward and backward passes | torch.autograd.Function, compare_backward (not gradcheck), mixed-precision, atomicAdd, attention bwd |
 
 ## Workflow
 

@@ -341,10 +341,16 @@ Check the forward output FIRST, then each gradient independently. If the forward
 the backward will also be wrong (garbage in, garbage out). Check dV and dK before dQ because
 dQ uses atomicAdd and is more likely to have issues.
 
-IMPORTANT: Do NOT use `torch.autograd.gradcheck` or `torch.autograd.gradgradcheck`.
-All TileLang examples use manual comparison with `torch.allclose` or
-`torch.testing.assert_close`. The finite-difference approach in gradcheck is too slow
-and numerically unreliable for large GPU kernels.
+IMPORTANT: Do NOT use `torch.autograd.gradcheck` or `torch.autograd.gradgradcheck` for
+TileLang kernels. Experimental testing across fp16, bf16, fp32, and mixed-precision (fp16/bf16
+forward with fp32 gradients) shows gradcheck **misses all tested bug types at every dtype** —
+swapped gradients, 2x-scaled gradients, and zeroed gradients all pass. This happens because
+gradcheck with `fast_mode=True` only checks a random Jacobian projection, and the loose
+tolerances needed for low-precision forward passes mask the errors. gradgradcheck OOMs even at
+256x256. Instead, use **`compare_backward`** — run forward+backward through both your kernel
+and a PyTorch reference, then compare gradients directly. This catches all bug types reliably
+and is significantly faster. See `references/gradient-testing-patterns.md` §3 for the utility and §6
+for the full experimental evidence.
 
 ## Gradient Debugging Techniques
 

@@ -40,10 +40,10 @@ Never change multiple parameters at once -- you won't know which one helped.
 ```
 | Config | Latency (ms) | TFLOPS | Notes |
 |--------|-------------|--------|-------|
-| baseline: bM=128 bN=128 bK=32 stages=2 thr=128 | 0.438 | 314 | |
-| change bK=64 | 0.389 | 353 | +12% ← keep |
-| change thr=256 | 0.415 | 331 | +5% from baseline |
-| change stages=3 | 0.446 | 308 | -2% ← revert |
+| baseline: bM=128 bN=128 bK=32 stages=2 thr=128 | ... | ... | |
+| change bK=64 | ... | ... | +X% ← keep |
+| change thr=256 | ... | ... | +Y% from baseline |
+| change stages=3 | ... | ... | -Z% ← revert |
 ```
 
 ## Optimization Checklist
@@ -54,13 +54,7 @@ Work through these in order. Each builds on the previous. For detailed explanati
 
 The single most important parameter. Larger tiles amortize memory access overhead but require more shared memory and registers.
 
-**Example results** (4096x4096x4096 GEMM, fp16 — your numbers will vary by GPU):
-
-| block_M x block_N | TFLOPS | vs baseline |
-|-------------------|--------|-------------|
-| 64 x 64 | 124 | -60% |
-| 128 x 128 | 314 | baseline |
-| 256 x 128 | varies | try for tall-M problems |
+Tile sizes have the largest impact on GEMM throughput. Going from 64x64 to 128x128 typically gives the biggest single improvement.
 
 **Rules of thumb:**
 - Start with 128x128 for GEMM kernels
@@ -72,10 +66,7 @@ The single most important parameter. Larger tiles amortize memory access overhea
 
 Controls the reduction dimension tile. Larger block_K means fewer iterations in the pipelined loop but more shared memory per stage.
 
-| block_K | TFLOPS | Notes |
-|---------|--------|-------|
-| 32 | 314 | default |
-| 64 | 353 | +12% |
+Increasing block_K (e.g. 32→64) can improve throughput on compute-bound kernels, at the cost of more shared memory per stage. Always measure — the gain depends on the kernel and GPU.
 
 **When to increase:** When shared memory allows it and the kernel is compute-bound.
 
@@ -83,11 +74,11 @@ Controls the reduction dimension tile. Larger block_K means fewer iterations in 
 
 Controls software pipelining depth in `T.Pipelined`. More stages overlap more memory transfers with compute, but each stage costs additional shared memory.
 
-| num_stages | TFLOPS | Notes |
-|-----------|--------|-------|
-| 0 | — | No pipelining (for debugging) |
-| 2 | 314 | Good default |
-| 3 | 308 | May be worse due to shared mem pressure |
+- `num_stages=0`: No pipelining (useful for debugging)
+- `num_stages=2`: Double-buffered — good default
+- `num_stages=3`: Triple-buffered — may help or hurt depending on shared memory pressure
+
+The difference between 2 and 3 stages is typically small. Always measure on your target GPU.
 
 **Guidelines:**
 - `num_stages=2` is a safe default
@@ -99,10 +90,7 @@ Controls software pipelining depth in `T.Pipelined`. More stages overlap more me
 
 Threads per block affects occupancy and parallelism within each block.
 
-| threads | TFLOPS | Notes |
-|---------|--------|-------|
-| 128 | 308 | default |
-| 256 | 331 | +7% |
+Increasing from 128 to 256 threads can improve throughput when tiles are large enough. The gain is modest and GPU-dependent — always measure.
 
 **Guidelines:**
 - 128 is a safe starting point
@@ -113,12 +101,7 @@ Threads per block affects occupancy and parallelism within each block.
 
 `T.use_swizzle(panel_size=10, enable=True)` reorders block execution to improve L2 cache locality for the B matrix in GEMM.
 
-| Swizzle | TFLOPS | Notes |
-|---------|--------|-------|
-| off | 308 | baseline (with stages=3, thr=128) |
-| on (panel=10) | 309 | negligible at 4096x4096 |
-
-Swizzle helps most when N is large relative to L2 cache size. At 4096x4096, the effect is minimal. Try it for larger problems (N >= 8192).
+Swizzle helps most when N is large relative to L2 cache size. For small problems the effect is minimal. Try it for larger problems (N >= 8192).
 
 ### 6. Memory Optimizations
 

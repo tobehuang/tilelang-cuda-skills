@@ -20,14 +20,9 @@ Detailed checklist for optimizing TileLang kernels. Work through each section in
 
 Tile sizes (block_M, block_N) determine how much work each thread block handles. Larger tiles amortize the cost of loading shared memory but require more on-chip resources.
 
-### Impact (4096x4096x4096 GEMM, fp16 — example results, your numbers will vary by GPU)
+### Impact
 
-| block_M | block_N | block_K | TFLOPS | Latency (ms) |
-|---------|---------|---------|--------|-------------|
-| 64 | 64 | 32 | 124 | 1.107 |
-| 128 | 128 | 32 | 314 | 0.438 |
-
-Going from 64x64 to 128x128 tiles delivers 2.5x speedup. This is the single highest-impact optimization.
+Going from 64x64 to 128x128 tiles is the single highest-impact optimization for compute-bound GEMM kernels. The exact speedup depends on the GPU and problem shape — always measure.
 
 ### How to Choose
 
@@ -66,10 +61,12 @@ block_K controls the reduction dimension per loop iteration. Larger block_K mean
 
 ### Impact
 
-| block_K | TFLOPS | Shared bytes (128x128, 2 stages) |
-|---------|--------|----------------------------------|
-| 32 | 314 | 32 KB |
-| 64 | 353 | 64 KB |
+Increasing block_K (e.g. 32→64) can improve throughput on compute-bound kernels, at the cost of doubling shared memory per stage. The gain depends on the GPU and kernel — always measure.
+
+| block_K | Shared bytes (128x128, 2 stages) |
+|---------|----------------------------------|
+| 32 | 32 KB |
+| 64 | 64 KB |
 
 ### When to Increase
 
@@ -95,12 +92,12 @@ block_K controls the reduction dimension per loop iteration. Larger block_K mean
 
 ### Impact
 
-| num_stages | TFLOPS | Shared bytes (128x128x32) |
-|-----------|--------|--------------------------|
-| 2 | 314 | 32 KB |
-| 3 | 308 | 48 KB |
+| num_stages | Shared bytes (128x128x32) |
+|-----------|--------------------------|
+| 2 | 32 KB |
+| 3 | 48 KB |
 
-The optimal stage count is hardware-dependent. On some GPUs, 3 stages is slightly worse due to increased shared memory pressure, while on others it helps.
+The throughput difference between 2 and 3 stages is typically small. The optimal stage count is hardware-dependent — on some GPUs, 3 stages is slightly worse due to increased shared memory pressure, while on others it helps. Always measure.
 
 ### Guidelines
 
@@ -115,10 +112,7 @@ The optimal stage count is hardware-dependent. On some GPUs, 3 stages is slightl
 
 ### Impact
 
-| threads | TFLOPS | Notes |
-|---------|--------|-------|
-| 128 | 308 | Baseline (with stages=3) |
-| 256 | 331 | +7% |
+Increasing from 128 to 256 threads can improve throughput when tiles are large enough (128x128 or bigger). The gain depends on the GPU and kernel — always measure.
 
 ### Guidelines
 
