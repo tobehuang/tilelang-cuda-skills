@@ -1,3 +1,7 @@
 .venv
 docs
 examples
+**/*.log
+.claude
+.agents
+.cursor
