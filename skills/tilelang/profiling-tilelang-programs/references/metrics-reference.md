@@ -36,6 +36,18 @@
 | Tensor Core Utilization | Fraction of eligible cycles using tensor cores |
 | Warp Stall Reasons | Why warps are waiting (memory, sync, etc.) |
 
+### Pipe Utilization Metrics (from ncu)
+
+These metrics break down which compute pipe is the bottleneck. Compare them against each other — the one with the highest utilization relative to its peak is the "shortest stave" limiting kernel throughput.
+
+| Metric | ncu name | TileLang mapping |
+|--------|---------|-----------------|
+| Tensor pipe | `sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active` | `T.gemm` (MMA instructions) |
+| FMA pipe | `sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active` | `T.Parallel` elementwise math |
+| ALU pipe | `sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_active` | Address computation, transcendentals (exp, log) |
+
+For the full bottleneck diagnosis methodology, see `ncu-bottleneck-guide.md`.
+
 ## How to Calculate Bytes Moved
 
 | Operation | Read bytes | Write bytes | Total |
@@ -66,7 +78,7 @@ These are approximate -- check your specific GPU with `nvidia-smi -q` or ncu:
 | A100 | 312 | 2039 | 153 |
 | H100 | 990 | 3350 | 296 |
 | RTX 4090 | 330 | 1008 | 327 |
-| RTX PRO 6000 Blackwell | ~varies | ~varies | Check with ncu |
+| Your GPU | Check `nvidia-smi -q` | Check `nvidia-smi -q` | Compute from peak FP16 / peak BW |
 
 ### GEMM Arithmetic Intensity
 
@@ -89,14 +101,7 @@ AI = 2 * 4096 * 1 * 4096 / ((4096*4096 + 4096 + 4096) * 2) ≈ 1 FLOP/byte → m
 
 ## Interpreting do_bench Results
 
-### Expected Latency Ranges (1024x1024 GEMM fp16)
-
-Validated on RTX PRO 6000 Blackwell:
-- `do_bench(backend="event")`: ~0.020 ms (105 TFLOPS)
-- `do_bench(backend="cupti")`: ~0.020 ms (110 TFLOPS)
-- `do_bench(backend="cudagraph")`: ~0.017 ms (125 TFLOPS)
-
-The `cudagraph` backend eliminates kernel launch overhead, giving the lowest (most optimistic) latency. Use `"event"` for realistic numbers.
+The `cudagraph` backend eliminates kernel launch overhead, giving the lowest (most optimistic) latency. Use `"event"` for realistic numbers. The `cupti` backend uses torch.profiler internally for per-kernel breakdowns.
 
 ### When Numbers Don't Make Sense
 
@@ -109,31 +114,31 @@ The `cudagraph` backend eliminates kernel launch overhead, giving the lowest (mo
 
 ```bash
 # Quick summary
-ncu --target-processes all .venv/bin/python script.py
+ncu --target-processes all python script.py
 
 # Full analysis, save report
-ncu --set full -o report .venv/bin/python script.py
+ncu --set full -o report python script.py
 
 # Specific metrics only
 ncu --metrics sm__warps_active.avg.pct_of_peak_sustained_active \
     --metrics l1tex__t_bytes_pipe_lsu_mem_global_op_ld.sum.per_second \
-    .venv/bin/python script.py
+    python script.py
 
 # Skip warmup kernels (profile only the Nth kernel)
-ncu --kernel-id ::N: .venv/bin/python script.py
+ncu --kernel-id ::N: python script.py
 
 # Profile specific kernel by name regex
-ncu --kernel-name "my_kernel" .venv/bin/python script.py
+ncu --kernel-name "my_kernel" python script.py
 ```
 
 ## nsys Command Cheat Sheet
 
 ```bash
 # Basic timeline
-nsys profile -o timeline .venv/bin/python script.py
+nsys profile -o timeline python script.py
 
 # With CUDA API trace
-nsys profile --trace=cuda,nvtx -o timeline .venv/bin/python script.py
+nsys profile --trace=cuda,nvtx -o timeline python script.py
 
 # Report summary
 nsys stats timeline.nsys-rep

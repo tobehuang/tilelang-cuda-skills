@@ -462,48 +462,27 @@ or a logic bug (max err ~ 1.0 or larger).
 
 ## Linear Attention Backward: A Different Pattern
 
-Linear attention backward (see `examples/linear_attention/example_linear_attn_bwd.py`) shows
-a variation where ALL gradient buffers use atomicAdd (dQ, dK, and dV are all float32), and the
-backward kernel uses a 2D grid `(NV, NK, B*H)` to tile across both key and value dimensions:
+Linear attention backward uses a different approach where ALL gradient buffers (dQ, dK, dV)
+use atomicAdd in float32, and the backward is a single monolithic kernel instead of multiple
+phases. The float32-to-float16 cast is done with `.to()` on the host rather than a separate
+postprocess kernel. It also uses reverse iteration for dK/dV and running state accumulation.
 
-```python
-# All three gradient buffers are zeroed for atomic accumulation
-dQ = torch.zeros_like(Q, dtype=torch.float32)
-dK = torch.zeros_like(K, dtype=torch.float32)
-dV = torch.zeros_like(V, dtype=torch.float32)
-kernel(Q, K, V, dO, dQ, dK, dV)
-# Cast all back to fp16
-return dQ.to(torch.float16), dK.to(torch.float16), dV.to(torch.float16)
-```
-
-The linear attention backward also demonstrates:
-- **Reverse iteration** for dK/dV: iterates chunks in reverse order to maintain the correct
-  running state `dh`
-- **Intra-chunk masking**: lower-triangular mask for dQ (causal within chunk), upper-triangular
-  for dK/dV
-- **Running state accumulation**: `h` (for dQ pass) and `dh` (for dK/dV pass) maintained
-  across chunks, analogous to the forward running state
-
-In this case, there is no separate preprocess or postprocess kernel -- the backward is a single
-monolithic kernel, and the float32-to-float16 cast is done with a simple `.to()` call on the host.
+For the full implementation details, read `references/fwd-bwd-examples.md` §Linear Attention Backward.
 
 ## Reference Examples
 
-These files in `examples/` demonstrate complete fwd+bwd implementations:
+For complete fwd+bwd implementations, read `references/fwd-bwd-examples.md` which contains:
 
-| File | Pattern | Key Features |
-|------|---------|-------------|
-| `examples/flash_attention/example_mha_bwd_bhsd.py` | Canonical fwd+bwd | Complete in single file: fwd, preprocess, bwd, postprocess, autograd.Function, ref, test |
-| `examples/linear_attention/example_linear_attn_fwd.py` | Forward only | Chunked linear attention with running state, atomic output accumulation |
-| `examples/linear_attention/example_linear_attn_bwd.py` | Backward only | Single monolithic backward kernel, all-atomic gradients, reverse iteration |
-| `examples/attention_sink/example_mha_sink_bwd_bhsd.py` | Fwd+bwd with extra params | Extra learnable `sinks` parameter, additional dsink gradient kernel, dtype-aware tolerances |
+| Example | Pattern | Key Features |
+|---------|---------|-------------|
+| Flash Attention Bwd | Canonical fwd+bwd | Complete: fwd, preprocess, bwd, postprocess, autograd.Function, ref, test |
+| Linear Attention Bwd | Monolithic backward | All-atomic gradients, reverse iteration, running state |
+| Attention Sink Bwd | Fwd+bwd with extra params | Extra learnable parameter, dtype-aware tolerances |
 
-The flash attention backward file (`example_mha_bwd_bhsd.py`) is the most instructive starting
-point. It contains every phase (forward, preprocess, main backward, postprocess) plus the
-autograd wrapper and testing code in a single self-contained file of ~390 lines.
+The flash attention backward example is the most instructive starting point — it contains
+every phase plus the autograd wrapper and testing code in a single self-contained file.
 
-The attention sink example (`example_mha_sink_bwd_bhsd.py`) extends the pattern to show how to
-handle additional learnable parameters, sliding window masking, and dtype-parameterized kernels.
+For gradient testing templates (matmul fwd+bwd, test harness, debugging techniques), read `references/gradient-testing-patterns.md`.
 
 ## Escalation
 
@@ -516,5 +495,5 @@ handle additional learnable parameters, sliding window masking, and dtype-parame
   tuning, pipelining, and memory optimization.
 
 - **Complex backward patterns** (warp specialization, TMA-based reductions, persistent kernels):
-  Read the source files directly in `examples/flash_attention/` and `examples/deepseek_mla/`
-  for advanced techniques beyond the standard pattern described here.
+  These are advanced techniques beyond the standard pattern described here. Read the full
+  examples in `references/fwd-bwd-examples.md` for implementation guidance.

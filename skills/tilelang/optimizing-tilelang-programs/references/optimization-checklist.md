@@ -20,7 +20,7 @@ Detailed checklist for optimizing TileLang kernels. Work through each section in
 
 Tile sizes (block_M, block_N) determine how much work each thread block handles. Larger tiles amortize the cost of loading shared memory but require more on-chip resources.
 
-### Impact (4096x4096x4096 GEMM, fp16, RTX PRO 6000 Blackwell)
+### Impact (4096x4096x4096 GEMM, fp16 — example results, your numbers will vary by GPU)
 
 | block_M | block_N | block_K | TFLOPS | Latency (ms) |
 |---------|---------|---------|--------|-------------|
@@ -54,9 +54,9 @@ For 128x128x32, fp16, 2 stages:
 ```
 
 GPU shared memory limits (default / max with opt-in):
-- Blackwell (sm_120): 228 KB max
-- Hopper (sm_90): 228 KB max
+- Blackwell (sm_120) / Hopper (sm_90): 228 KB max
 - Ampere (sm_80): 164 KB max
+- Check your GPU's limit with ncu
 
 If your config exceeds the default 48 KB, the compiler may automatically request more. If it exceeds the GPU max, the kernel will fail to launch.
 
@@ -100,7 +100,7 @@ block_K controls the reduction dimension per loop iteration. Larger block_K mean
 | 2 | 314 | 32 KB |
 | 3 | 308 | 48 KB |
 
-On Blackwell, 3 stages is slightly worse due to increased shared memory pressure. This is hardware-dependent -- on Ampere, 3 stages often helps.
+The optimal stage count is hardware-dependent. On some GPUs, 3 stages is slightly worse due to increased shared memory pressure, while on others it helps.
 
 ### Guidelines
 
@@ -171,7 +171,7 @@ For maximum memory throughput, inner dimensions should be multiples of 8 (fp16) 
 Shared memory is organized in 32 banks. If multiple threads in a warp access the same bank, accesses are serialized (bank conflict). TileLang's layout inference handles most cases, but unusual access patterns can cause conflicts. Check with ncu:
 
 ```bash
-ncu --metrics l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum .venv/bin/python script.py
+ncu --metrics l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum python script.py
 ```
 
 ## 7. Epilogue Fusion
@@ -256,7 +256,7 @@ When M or N is small but K is large, a single tile handles the full M or N dimen
 
 ### Persistent Kernels
 
-For problems where many small GEMMs are launched sequentially, persistent kernels keep threads alive across multiple GEMM tiles, reducing launch overhead. This is an advanced pattern -- see `examples/flash_attention/` for examples.
+For problems where many small GEMMs are launched sequentially, persistent kernels keep threads alive across multiple GEMM tiles, reducing launch overhead. This is an advanced pattern used in flash attention implementations.
 
 ### Warp Specialization
 

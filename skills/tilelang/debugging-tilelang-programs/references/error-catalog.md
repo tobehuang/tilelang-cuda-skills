@@ -63,8 +63,8 @@ N = ((raw_N + 7) // 8) * 8  # pad to multiple of 8
 ### `CUDA error: an illegal memory access was encountered`
 **Cause**: Kernel accessed memory outside allocated bounds.
 **Debug**:
-1. Run with: `CUDA_LAUNCH_BLOCKING=1 .venv/bin/python script.py`
-2. Run with: `compute-sanitizer --tool memcheck .venv/bin/python script.py`
+1. Run with: `CUDA_LAUNCH_BLOCKING=1 python script.py`
+2. Run with: `compute-sanitizer --tool memcheck python script.py`
 3. Reduce problem to single tile (M=block_M, N=block_N)
 4. Check index expressions: `by * block_M + local_idx < M`
 

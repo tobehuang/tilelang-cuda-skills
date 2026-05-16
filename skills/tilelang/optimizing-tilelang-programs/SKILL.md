@@ -20,6 +20,7 @@ Before optimizing, ensure:
 1. **Correctness is verified** -- use `profiler.assert_allclose(ref_program, rtol=1e-2, atol=1e-2)`
 2. **You have a baseline measurement** -- use the **profiling-tilelang-programs** skill to get latency and TFLOPS
 3. **You know whether the kernel is compute-bound or memory-bound** -- this determines which optimizations matter
+4. **You know the specific bottleneck** -- use ncu to determine if the kernel is tensor core bound, CUDA core (FMA) bound, memory bound, or latency bound (see **profiling-tilelang-programs** skill §Bottleneck Diagnosis and `references/ncu-bottleneck-guide.md` in the profiling skill)
 
 ## The Change-One-Thing Method
 
@@ -53,7 +54,7 @@ Work through these in order. Each builds on the previous. For detailed explanati
 
 The single most important parameter. Larger tiles amortize memory access overhead but require more shared memory and registers.
 
-**Validated benchmarks** (4096x4096x4096 GEMM, fp16, RTX PRO 6000 Blackwell):
+**Example results** (4096x4096x4096 GEMM, fp16 — your numbers will vary by GPU):
 
 | block_M x block_N | TFLOPS | vs baseline |
 |-------------------|--------|-------------|
@@ -74,9 +75,9 @@ Controls the reduction dimension tile. Larger block_K means fewer iterations in 
 | block_K | TFLOPS | Notes |
 |---------|--------|-------|
 | 32 | 314 | default |
-| 64 | 353 | +12%, best on Blackwell |
+| 64 | 353 | +12% |
 
-**When to increase:** When shared memory allows it and the kernel is compute-bound. For fp16 on Blackwell, block_K=64 is often optimal.
+**When to increase:** When shared memory allows it and the kernel is compute-bound.
 
 ### 3. Pipeline Stages (num_stages)
 
@@ -86,7 +87,7 @@ Controls software pipelining depth in `T.Pipelined`. More stages overlap more me
 |-----------|--------|-------|
 | 0 | — | No pipelining (for debugging) |
 | 2 | 314 | Good default |
-| 3 | 308 | Slightly worse on Blackwell (shared mem pressure) |
+| 3 | 308 | May be worse due to shared mem pressure |
 
 **Guidelines:**
 - `num_stages=2` is a safe default
@@ -101,7 +102,7 @@ Threads per block affects occupancy and parallelism within each block.
 | threads | TFLOPS | Notes |
 |---------|--------|-------|
 | 128 | 308 | default |
-| 256 | 331 | +7% on Blackwell |
+| 256 | 331 | +7% |
 
 **Guidelines:**
 - 128 is a safe starting point
@@ -235,11 +236,11 @@ print(f"cuBLAS:    {ref_latency:.4f} ms ({ref_tflops:.1f} TFLOPS)")
 
 ## Important Caveats
 
-- **Optimal config varies by problem size.** TileLang with block_M=128, block_N=128, block_K=64 beats cuBLAS at 4096x4096 (353 vs 282 TFLOPS) but may lose at smaller sizes like 2048x2048. Always benchmark at your target production size.
+- **Optimal config varies by problem size.** A config that beats cuBLAS at 4096x4096 may lose at smaller sizes. Always benchmark at your target production size.
 
 - **Compilation happens once.** Each unique set of compile-time parameters produces a new compiled kernel. Changing tile sizes means recompilation, not just re-running the same code. This is fast (< 1 second for simple kernels) but matters for autotuning.
 
-- **Shared memory limits.** Total shared memory per block must fit within GPU limits (typically 48KB default, up to 228KB with opt-in on Blackwell). Formula: `(block_M * block_K + block_K * block_N) * dtype_bytes * num_stages`. If exceeded, the kernel either fails to launch or silently uses slower memory.
+- **Shared memory limits.** Total shared memory per block must fit within GPU limits (typically 48KB default, up to 164-228KB with opt-in depending on GPU architecture). Formula: `(block_M * block_K + block_K * block_N) * dtype_bytes * num_stages`. If exceeded, the kernel either fails to launch or silently uses slower memory.
 
 - **TMA alignment on Blackwell/Hopper.** Inner dimensions must be multiples of 8 (fp16) or 4 (fp32) due to TMA hardware requirements. This constrains which tile sizes are valid.
 
@@ -252,7 +253,7 @@ print(f"cuBLAS:    {ref_latency:.4f} ms ({ref_tflops:.1f} TFLOPS)")
 | Ignoring correctness after changes | Fast wrong answers are useless | Re-run assert_allclose after every change |
 | Too many pipeline stages | Shared memory overflow, perf regression | Start with 2, increase only if latency improves |
 | Using `@tilelang.autotune` decorator with `ref_prog` | Cache serialization error | Use programmatic `AutoTuner.from_kernel()` API instead |
-| Assuming larger tiles always help | Diminishing returns, register pressure | 128x128 is the sweet spot for most GEMM on Blackwell |
+| Assuming larger tiles always help | Diminishing returns, register pressure | 128x128 is a good starting point for most GEMM |
 
 ## Escalation
 

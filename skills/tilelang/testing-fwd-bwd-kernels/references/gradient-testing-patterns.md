@@ -312,7 +312,7 @@ If dA looks like a transposed version of what you expect, the backward kernel ha
 
 ## 4. Attention Fwd+Bwd Architecture
 
-This section outlines the architecture without full code -- for complete implementations, read `examples/flash_attention/example_mha_bwd_bhsd.py`.
+This section outlines the architecture without full code -- for complete implementations, read `references/fwd-bwd-examples.md`.
 
 ### Forward Phase
 

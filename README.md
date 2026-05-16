@@ -2,7 +2,7 @@
 
 Agent skills for writing, debugging, profiling, and optimizing [TileLang](https://github.com/tile-ai/tilelang) GPU kernels.
 
-Contents are created by Claude Code with the `skill-creator` plugin. Based on TileLang `v0.1.9` docs and examples, validated on RTX PRO 6000 Blackwell GPUs (sm_120).
+Contents are created by Claude opus 4.6 in claude code with the `skill-creator` plugin. Based on TileLang `v0.1.9` docs and examples, validated on RTX PRO 6000 Blackwell GPUs (sm_120) with CUDA 13.1 and pytorch 2.11.
 
 The `.vscode` directory is intentionally tracked as a reference to configure highlighting for humans.
 

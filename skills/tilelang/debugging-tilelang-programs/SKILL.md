@@ -29,7 +29,7 @@ Before debugging, identify which category the error falls into:
 
 Always start by reproducing the error with the exact command:
 ```bash
-.venv/bin/python script.py
+python script.py
 ```
 
 Capture the full traceback. If the error is intermittent, fix the random seed:
@@ -90,13 +90,14 @@ torch.cuda.manual_seed(42)
 
 1. **Run with CUDA launch blocking** for synchronous errors:
    ```bash
-   CUDA_LAUNCH_BLOCKING=1 .venv/bin/python script.py
+   CUDA_LAUNCH_BLOCKING=1 python script.py
    ```
 
 2. **Use compute-sanitizer** for memory errors:
    ```bash
-   compute-sanitizer --tool memcheck .venv/bin/python script.py
+   compute-sanitizer --tool memcheck python script.py
    ```
+   **What to look for**: `Invalid __global__ read/write` errors include the thread and block IDs that caused the violation. If only the last block triggers the error, you likely have a boundary issue (tile size doesn't divide problem size). If all blocks trigger, it's a systematic indexing bug. See `references/interpreting-debug-output.md` §4 for details.
 
 3. **Reduce problem size** to exactly one tile (M=block_M, N=block_N, K=block_K for GEMM). This eliminates multi-block interactions.
 
@@ -143,6 +144,8 @@ Output format:
 ```
 msg='A_shared after copy:' BlockIdx=(0, 0, 0), ThreadIdx=(0, 0, 0): buffer=A_shared, index=0, dtype=half_t value=1.234
 ```
+
+**Interpreting T.print output**: Each line shows `index=N` which maps to buffer coordinates — for a 2D buffer (M, N), `index=k` → `buffer[k // N, k % N]` (row-major). Compare element-by-element against a PyTorch reference at the same small size. If all values are NaN → missing `T.clear`. If values match for the first tile but not subsequent ones → off-by-one in tile iteration. See `references/interpreting-debug-output.md` §1 for the full pattern interpretation table.
 
 **Tips for effective T.print debugging:**
 - Shrink to minimal sizes (e.g., M=N=K=block_M for GEMM) so output is manageable
@@ -222,7 +225,7 @@ Results are close but `assert_close` fails with small relative error.
 When a kernel fails and the source is large, AutoDD automatically minimizes it to a minimal reproduction:
 
 ```bash
-.venv/bin/python -m tilelang.autodd script.py --err-msg "error substring" -o minimized.py -j 4 --timeout 60
+python -m tilelang.autodd script.py --err-msg "error substring" -o minimized.py -j 4 --timeout 60
 ```
 
 | Parameter | Description |
@@ -247,12 +250,12 @@ Example: A 200-line buggy GEMM with wrong B_shared shape gets minimized to ~30 l
 For deeper debugging of the compilation pipeline:
 
 ```bash
-TVM_LOG_DEBUG=1 .venv/bin/python script.py
+TVM_LOG_DEBUG=1 python script.py
 ```
 
 This enables verbose TVM/TileLang logging showing each pass and transformation. For specific passes:
 ```bash
-TVM_LOG_DEBUG=DEFAULT=0,target/codegen_cuda.cc=1 .venv/bin/python script.py
+TVM_LOG_DEBUG=DEFAULT=0,target/codegen_cuda.cc=1 python script.py
 ```
 
 ## Race Condition Detection
@@ -285,3 +288,6 @@ This runs the kernel 10 times and checks all results are identical. If it fails,
 - For performance issues (not bugs), use the **profiling-tilelang-programs** skill
 
 For a comprehensive error catalog with more examples, read `references/error-catalog.md`.
+For interpreting T.print output, compute-sanitizer errors, and AutoDD results, read `references/interpreting-debug-output.md`.
+For the full debug tools documentation (T.print, AutoDD, callbacks), read `references/debug-tools-doc.md`.
+For performance analysis with ncu/nsys (not debugging), use the **profiling-tilelang-programs** skill.

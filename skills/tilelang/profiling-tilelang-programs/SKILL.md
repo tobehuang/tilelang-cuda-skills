@@ -187,10 +187,10 @@ Best for understanding why a specific kernel is slow. Shows occupancy, memory th
 
 ```bash
 # Basic profile
-ncu --target-processes all .venv/bin/python script.py
+ncu --target-processes all python script.py
 
 # Full metrics, save report
-ncu --set full -o profile_report .venv/bin/python script.py
+ncu --set full -o profile_report python script.py
 
 # Open report in GUI
 ncu-ui profile_report.ncu-rep
@@ -209,7 +209,7 @@ ncu-ui profile_report.ncu-rep
 Best for understanding kernel launch overhead, CPU/GPU overlap, and multi-kernel workflows.
 
 ```bash
-nsys profile -o timeline_report .venv/bin/python script.py
+nsys profile -o timeline_report python script.py
 nsys-ui timeline_report.nsys-rep
 ```
 
@@ -218,7 +218,7 @@ nsys-ui timeline_report.nsys-rep
 Not a profiler, but essential for debugging memory issues:
 
 ```bash
-compute-sanitizer --tool memcheck .venv/bin/python script.py
+compute-sanitizer --tool memcheck python script.py
 ```
 
 ### Fallback When Vendor Tools Aren't Available
@@ -228,6 +228,36 @@ If ncu/nsys aren't installed, use `do_bench(backend="cupti")` which uses torch.p
 ```python
 latency = profiler.do_bench(warmup=25, rep=100, backend="cupti")
 ```
+
+## Bottleneck Diagnosis with ncu
+
+Beyond basic latency measurement, ncu reveals *why* a kernel is slow. The approach is to find the **shortest stave of the barrel** — whichever hardware resource has the highest utilization relative to its own peak is the bottleneck.
+
+### Quick Pipe Check
+
+```bash
+ncu --metrics \
+  sm__throughput.avg.pct_of_peak_sustained_elapsed,\
+  dram__throughput.avg.pct_of_peak_sustained_elapsed,\
+  sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_active,\
+  sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active \
+  --kernel-id ::1: --target-processes all python script.py
+```
+
+### How to Read the Output
+
+1. **Compare SM Throughput vs DRAM Throughput** — the higher one indicates whether the kernel is compute-dominated or memory-dominated. If both are low, it's latency-dominated (hardware underutilized).
+
+2. **For compute-dominated kernels, compare compute pipes:**
+   - **Tensor pipe** (`sm__pipe_tensor_cycles_active`): tensor core MMA instructions → `T.gemm`
+   - **FMA pipe** (`sm__pipe_fma_cycles_active`): scalar/vector FP math → `T.Parallel` elementwise work
+   - The pipe with the highest utilization is the compute bottleneck
+
+3. **For memory-dominated kernels**: check L2 hit rate and shared memory bank conflicts to determine whether DRAM, L2, or shared memory is the stave.
+
+4. **For latency-dominated kernels**: check warp stall reasons (`smsp__warp_issue_stalled_*`) — the dominant stall reason tells you what warps are waiting for (barriers, memory, compute backpressure).
+
+Each diagnosis maps to specific TileLang actions (tile sizes, pipeline depth, epilogue fusion, etc.). For the complete decision tree, metric names, and worked examples, read `references/ncu-bottleneck-guide.md`.
 
 ## Inspecting Generated CUDA Source
 
@@ -262,3 +292,4 @@ Look for:
 - Need to profile fwd+bwd pair together → use Nsight Systems for timeline view
 
 For detailed GPU metrics reference, read `references/metrics-reference.md`.
+For the full ncu/nsys bottleneck diagnosis guide (pipe breakdown, warp stalls, TileLang actions), read `references/ncu-bottleneck-guide.md`.

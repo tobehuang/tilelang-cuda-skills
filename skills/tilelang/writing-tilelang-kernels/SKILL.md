@@ -19,23 +19,22 @@ description: >
 
 Before writing any kernel:
 
-1. **Verify the environment**: `.venv/bin/python -c "import tilelang; print(tilelang.__version__)"`
+1. **Verify the environment**: `python -c "import tilelang; print(tilelang.__version__)"`
 2. **Identify the target operation**: What are the input/output shapes, dtypes, and the mathematical operation?
 3. **Write a PyTorch reference first**: You will need this for correctness validation.
-4. **Find the closest existing example** in `examples/`:
+4. **Find the closest pattern** — read `references/tilelang-examples.md` for complete working examples:
 
-| Pattern | Example File | Key Features |
-|---------|-------------|--------------|
-| GEMM | `examples/gemm/example_gemm.py` | T.gemm, shared memory, pipelining |
-| GEMM + fusion | `examples/quickstart.py` | ReLU epilogue after GEMM |
-| Elementwise | `examples/elementwise/example_elementwise_add.py` | T.Parallel, shared memory staging |
-| Reduction/Norm | `examples/norm/rms_norm.py` | T.reduce_sum, two-pass pattern |
-| Online Softmax | `examples/online_softmax/online_softmax.py` | Running max, exp, rescaling |
-| Flash Attention | `examples/flash_attention/example_mha_fwd_bhsd.py` | Multi-fragment, softmax in loop |
-| Linear Attention | `examples/linear_attention/example_linear_attn_fwd.py` | Chunked, running state |
-| Autotuning | `examples/gemm/example_gemm_autotune.py` | AutoTuner, config search |
+| Pattern | What to look for |
+|---------|-----------------|
+| GEMM | T.gemm, shared memory, pipelining |
+| GEMM + fusion | ReLU/sigmoid epilogue after GEMM |
+| Elementwise | T.Parallel, shared memory staging |
+| Reduction/Norm | T.reduce_sum, two-pass pattern |
+| Online Softmax | Running max, exp, rescaling |
+| Flash Attention | Multi-fragment, softmax in loop |
+| Linear Attention | Chunked, running state |
 
-Read the closest example before writing your kernel. Understanding the existing pattern saves time.
+For the complete TileLang language reference (primitives, control flow, instructions), read `references/language-docs.md`.
 
 ## Kernel Anatomy
 
@@ -139,23 +138,6 @@ def my_kernel(M, N, K, block_M, block_N, block_K, dtype=T.float16, accum_dtype=T
 
 ## Quick Templates
 
-### Elementwise (1D)
-
-```python
-@tilelang.jit(out_idx=[-1])
-def vector_scale(N, block_size, scale_val, dtype=T.float16):
-    @T.prim_func
-    def kernel(X: T.Tensor((N,), dtype), Y: T.Tensor((N,), dtype)):
-        with T.Kernel(T.ceildiv(N, block_size), threads=128) as (bx,):
-            X_shared = T.alloc_shared((block_size,), dtype)
-            Y_local = T.alloc_fragment((block_size,), dtype)
-            T.copy(X[bx * block_size], X_shared)
-            for i in T.Parallel(block_size):
-                Y_local[i] = X_shared[i] * T.cast(scale_val, dtype)
-            T.copy(Y_local, Y[bx * block_size])
-    return kernel
-```
-
 ### Elementwise (2D)
 
 ```python
@@ -171,27 +153,6 @@ def softplus(M, N, block_M, block_N, dtype=T.float16, accum_dtype=T.float32):
                 val = T.cast(X_shared[i, j], accum_dtype)
                 Y_local[i, j] = T.log(T.cast(1.0, accum_dtype) + T.exp(val))
             T.copy(Y_local, Y[by * block_M, bx * block_N])
-    return kernel
-```
-
-### Reduction (Row Sum)
-
-```python
-@tilelang.jit(out_idx=[-1])
-def row_sum(M, N, block_M, block_N, dtype=T.float16, accum_dtype=T.float32):
-    @T.prim_func
-    def kernel(A: T.Tensor((M, N), dtype), Out: T.Tensor((M,), accum_dtype)):
-        with T.Kernel(T.ceildiv(M, block_M), threads=128) as (bx,):
-            A_shared = T.alloc_shared((block_M, block_N), dtype)
-            acc = T.alloc_fragment((block_M,), accum_dtype)
-            local_sum = T.alloc_fragment((block_M,), accum_dtype)
-            T.clear(acc)
-            for ko in T.serial(T.ceildiv(N, block_N)):
-                T.copy(A[bx * block_M, ko * block_N], A_shared)
-                T.reduce_sum(A_shared, local_sum, dim=1)
-                for i in T.Parallel(block_M):
-                    acc[i] = acc[i] + local_sum[i]
-            T.copy(acc, Out[bx * block_M])
     return kernel
 ```
 
@@ -215,35 +176,7 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype=T.float16, accum_dtype=T.fl
     return kernel
 ```
 
-### Dynamic Shape GEMM
-
-```python
-@tilelang.jit(out_idx=[-1])
-def dynamic_matmul(block_M, block_N, block_K, dtype=T.float16, accum_dtype=T.float32):
-    M = T.dynamic("M")
-    N = T.dynamic("N")
-    K = T.dynamic("K")
-    @T.prim_func
-    def kernel(A: T.Tensor((M, K), dtype), B: T.Tensor((K, N), dtype), C: T.Tensor((M, N), dtype)):
-        with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), threads=128) as (bx, by):
-            A_shared = T.alloc_shared((block_M, block_K), dtype)
-            B_shared = T.alloc_shared((block_K, block_N), dtype)
-            C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
-            T.clear(C_local)
-            for ko in T.Pipelined(T.ceildiv(K, block_K), num_stages=2):
-                T.copy(A[by * block_M, ko * block_K], A_shared)
-                T.copy(B[ko * block_K, bx * block_N], B_shared)
-                T.gemm(A_shared, B_shared, C_local)
-            T.copy(C_local, C[by * block_M, bx * block_N])
-    return kernel
-
-# Usage: compile once, run with different shapes
-kernel = dynamic_matmul(128, 128, 32)
-c1 = kernel(a_256x256, b_256x256)  # works
-c2 = kernel(a_512x1024, b_1024x256)  # also works, same compiled kernel
-```
-
-For full templates with complete imports, host code, and validation, read `references/kernel-templates.md`.
+For more templates (1D elementwise, row reduction, dynamic shape GEMM) with complete imports, host code, and validation, read `references/kernel-templates.md`. For full working examples, read `references/tilelang-examples.md`.
 
 ## Key API Patterns
 
