@@ -1,14 +1,12 @@
-# TileLang Development Skills
+# GPU Development Skills
 
-Agent skills for writing, debugging, profiling, and optimizing [TileLang](https://github.com/tile-ai/tilelang) GPU kernels.
-
-Contents are created by Claude opus 4.6 in claude code with the `skill-creator` plugin. Based on TileLang `v0.1.9` docs and examples, validated on RTX PRO 6000 Blackwell GPUs (sm_120) with CUDA 13.1 and pytorch 2.11.
+Agent skills for GPU kernel development — writing, debugging, profiling, and optimizing CUDA and [TileLang](https://github.com/tile-ai/tilelang) GPU kernels.
 
 The `.vscode` directory is intentionally tracked as a reference to configure highlighting for humans.
 
-## Skills
+## TileLang Skills
 
-## Tilelang Skills
+TileLang skills created by Claude Opus 4.6 (probably) in Claude Code with the `skill-creator` plugin. Based on TileLang `v0.1.9` docs and examples, validated on RTX PRO 6000 Blackwell GPUs (sm_120) with CUDA 13.1 and PyTorch 2.11.
 
 | Skill | Description | Key Topics |
 |-------|-------------|------------|
@@ -36,4 +34,8 @@ writing → debugging → profiling → optimizing
 
 ## CUDA Skills
 
-Originally from `https://github.com/technillogue/ptx-isa-markdown.git`
+General-purpose CUDA development skill for debugging, profiling, and optimizing GPU kernels — independent of any specific framework. Originally from [`technillogue/ptx-isa-markdown`](https://github.com/technillogue/ptx-isa-markdown). Includes scraped PTX ISA 9.1, CUDA Runtime API 13.1, and CUDA Driver API 13.1 documentation (640+ markdown files) for grep-based lookup.
+
+| Skill | Description | Key Topics |
+|-------|-------------|------------|
+| [cuda-programming](skills/cuda_skill/SKILL.md) | Debug, profile, and optimize CUDA kernels | compute-sanitizer, cuda-gdb, ncu/nsys profiling, NVTX, PTX ISA, coalescing, bank conflicts, inline PTX |
