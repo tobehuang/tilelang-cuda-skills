@@ -8,6 +8,8 @@ The `.vscode` directory is intentionally tracked as a reference to configure hig
 
 ## Skills
 
+## Tilelang Skills
+
 | Skill | Description | Key Topics |
 |-------|-------------|------------|
 | [writing-tilelang-kernels](skills/tilelang/writing-tilelang-kernels/SKILL.md) | Write TileLang GPU kernels from scratch or by adapting patterns | Kernel anatomy, templates (GEMM, elementwise, reduction), memory scopes, T.copy/T.gemm, dynamic shapes |
@@ -16,7 +18,7 @@ The `.vscode` directory is intentionally tracked as a reference to configure hig
 | [optimizing-tilelang-programs](skills/tilelang/optimizing-tilelang-programs/SKILL.md) | Optimize TileLang kernels for performance | Tile sizes, pipeline stages, threads, AutoTuner, epilogue fusion, swizzle, ncu-guided tuning |
 | [testing-fwd-bwd-kernels](skills/tilelang/testing-fwd-bwd-kernels/SKILL.md) | Test kernels with forward and backward passes | torch.autograd.Function, compare_backward (not gradcheck), mixed-precision, atomicAdd, attention bwd |
 
-## Workflow
+### Workflow
 
 The skills form a natural progression:
 
@@ -32,3 +34,6 @@ writing → debugging → profiling → optimizing
 4. **Optimize** to improve performance
 5. **Test fwd+bwd** if the kernel needs gradients
 
+## CUDA Skills
+
+Originally from `https://github.com/technillogue/ptx-isa-markdown.git`
